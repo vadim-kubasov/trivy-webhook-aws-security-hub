@@ -81,7 +81,7 @@ jobs:
           helm package charts/trivy-webhook-aws-security-hub --app-version=${VERSION:1} --version=${VERSION:1} --destination=.cr-release-packages
 
       - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
+        uses: askcloudarchitech/chart-releaser-action@skip-packaging-option
         with:
           skip_packaging: true
         env:
