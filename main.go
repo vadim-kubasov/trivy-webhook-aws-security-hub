@@ -9,8 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	Trivytypes "github.com/csepulveda/trivy-webhook-aws-security-hub/types"
-
+	"github.com/aquasecurity/trivy-operator/pkg/apis/aquasecurity/v1alpha1"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/securityhub"
@@ -19,9 +18,14 @@ import (
 	"github.com/gorilla/mux"
 )
 
+type webhook struct {
+	Kind       string `json:"kind"`
+	APIVersion string `json:"apiVersion"`
+}
+
 // ProcessTrivyWebhook processes incoming vulnerability reports
 func ProcessTrivyWebhook(w http.ResponseWriter, r *http.Request) {
-	var report Trivytypes.VulnerabilityReport
+	var report webhook
 
 	// Read request body
 	body, err := io.ReadAll(r.Body)
@@ -46,22 +50,44 @@ func ProcessTrivyWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//Continue only if report.Kind is a VulnerabilityReport
-	if report.Kind != "VulnerabilityReport" {
-		http.Error(w, "Invalid report kind", http.StatusBadRequest)
-		log.Printf("Invalid report kind: %s", report.Kind)
+	var findings []types.AwsSecurityFinding
+	switch report.Kind {
+	case "ConfigAuditReport":
+		findings, err = getConfigAuditReportFindings(body)
+		if err != nil {
+			http.Error(w, "Error processing report", http.StatusInternalServerError)
+			log.Printf("Error processing report: %v", err)
+			return
+		}
+	case "InfraAssessmentReport":
+		findings, err = getInfraAssessmentReport(body)
+		if err != nil {
+			http.Error(w, "Error processing report", http.StatusInternalServerError)
+			log.Printf("Error processing report: %v", err)
+			return
+		}
+	case "ClusterComplianceReport":
+		findings, err = getClusterComplianceReport(body)
+		if err != nil {
+			http.Error(w, "Error processing report", http.StatusInternalServerError)
+			log.Printf("Error processing report: %v", err)
+			return
+		}
+	case "VulnerabilityReport":
+		findings, err = getVulnerabilityReportFindings(body)
+		if err != nil {
+			http.Error(w, "Error processing report", http.StatusInternalServerError)
+			log.Printf("Error processing report: %v", err)
+			return
+		}
+	default: // Unknown report type
+		http.Error(w, "unknown report type", http.StatusBadRequest)
+		log.Printf("unknown report type: %s", report.Kind)
 		return
 	}
 
-	//Continue only if report.Report.Vulnerabilities exists
-	if len(report.Report.Vulnerabilities) == 0 {
-		http.Error(w, "No vulnerabilities found", http.StatusBadRequest)
-		log.Printf("No vulnerabilities found in the report")
-		return
-	}
-
-	// Import findings to AWS Security Hub
-	err = importFindingsToSecurityHub(report)
+	//send findings to security hub
+	err = importFindingsToSecurityHub(findings)
 	if err != nil {
 		http.Error(w, "Error importing findings to Security Hub", http.StatusInternalServerError)
 		log.Printf("Error importing findings to Security Hub: %v", err)
@@ -77,32 +103,94 @@ func ProcessTrivyWebhook(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// importFindingsToSecurityHub imports vulnerabilities to AWS Security Hub
-func importFindingsToSecurityHub(report Trivytypes.VulnerabilityReport) error {
-	log.Printf("Processing report: %s", report.Metadata.Name)
+func getConfigAuditReportFindings(body []byte) ([]types.AwsSecurityFinding, error) {
+	configAuditReportFindings := &v1alpha1.ConfigAuditReport{}
 
+	// Decode JSON
+	err := json.Unmarshal(body, &configAuditReportFindings)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding JSON: %v", err)
+	}
+
+	log.Printf("Processing report: %s", configAuditReportFindings.Name)
+	// by the moment, only print the report for debugging purposes
+	log.Printf("Report: %v", configAuditReportFindings)
+
+	// Prepare findings for AWS Security Hub BatchImportFindings API
+	var findings []types.AwsSecurityFinding
+
+	return findings, nil
+}
+
+func getInfraAssessmentReport(body []byte) ([]types.AwsSecurityFinding, error) {
+	infraAssessmentReport := &v1alpha1.InfraAssessmentReport{}
+
+	// Decode JSON
+	err := json.Unmarshal(body, &infraAssessmentReport)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding JSON: %v", err)
+	}
+
+	log.Printf("Processing report: %s", infraAssessmentReport.Name)
+	// by the moment, only print the report for debugging purposes
+	log.Printf("Report: %v", infraAssessmentReport)
+
+	// Prepare findings for AWS Security Hub BatchImportFindings API
+	var findings []types.AwsSecurityFinding
+
+	return findings, nil
+}
+
+func getClusterComplianceReport(body []byte) ([]types.AwsSecurityFinding, error) {
+	clusterComplianceReport := &v1alpha1.ClusterComplianceReport{}
+
+	// Decode JSON
+	err := json.Unmarshal(body, &clusterComplianceReport)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding JSON: %v", err)
+	}
+
+	log.Printf("Processing report: %s", clusterComplianceReport.Name)
+	// by the moment, only print the report for debugging purposes
+	log.Printf("Report: %v", clusterComplianceReport)
+
+	// Prepare findings for AWS Security Hub BatchImportFindings API
+	var findings []types.AwsSecurityFinding
+
+	return findings, nil
+}
+
+func getVulnerabilityReportFindings(body []byte) ([]types.AwsSecurityFinding, error) {
+	vulnerabilityReport := &v1alpha1.VulnerabilityReport{}
+
+	// Decode JSON
+	err := json.Unmarshal(body, &vulnerabilityReport)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding JSON: %v", err)
+	}
+
+	log.Printf("Processing report: %s", vulnerabilityReport.Name)
 	// Load AWS SDK config
 	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
-		return fmt.Errorf("unable to load SDK config: %v", err)
+		return nil, fmt.Errorf("unable to load SDK config: %v", err)
 	}
 
-	// Create AWS Security Hub and STS clients
-	client := securityhub.NewFromConfig(cfg)
+	// Create AWS STS clients
 	stsClient := sts.NewFromConfig(cfg)
 	callerIdentity, err := stsClient.GetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return fmt.Errorf("failed to get caller identity: %w", err)
+		return nil, fmt.Errorf("failed to get caller identity: %w", err)
 	}
 
 	// Prepare variables
 	AWSAccountID := aws.ToString(callerIdentity.Account)
 	AWSRegion := cfg.Region
 	ProductArn := fmt.Sprintf("arn:aws:securityhub:%s::product/aquasecurity/aquasecurity", AWSRegion)
-	Container := report.Metadata.Labels["trivy-operator.container.name"]
-	Registry := report.Report.Registry.Server
-	Repository := report.Report.Artifact.Repository
-	Digest := report.Report.Artifact.Digest
+	Container := vulnerabilityReport.Labels["trivy-operator.container.name"]
+	Registry := vulnerabilityReport.Report.Registry.Server
+	Repository := vulnerabilityReport.Report.Artifact.Repository
+	Digest := vulnerabilityReport.Report.Artifact.Digest
 	FullImageName := fmt.Sprintf("%s/%s:%s", Registry, Repository, Digest)
 	ImageName := fmt.Sprintf("%s/%s", Registry, Repository)
 
@@ -110,7 +198,7 @@ func importFindingsToSecurityHub(report Trivytypes.VulnerabilityReport) error {
 	var findings []types.AwsSecurityFinding
 
 	// Handle Vulnerabilities
-	for _, vuln := range report.Report.Vulnerabilities {
+	for _, vuln := range vulnerabilityReport.Report.Vulnerabilities {
 		severity := vuln.Severity
 		if severity == "UNKNOWN" {
 			severity = "INFORMATIONAL"
@@ -155,7 +243,7 @@ func importFindingsToSecurityHub(report Trivytypes.VulnerabilityReport) error {
 							"PkgName":           vuln.Resource,
 							"Installed Package": vuln.InstalledVersion,
 							"Patched Package":   vuln.FixedVersion,
-							"NvdCvssScoreV3":    fmt.Sprintf("%f", vuln.Score),
+							"NvdCvssScoreV3":    fmt.Sprintf("%f", *vuln.Score),
 							"NvdCvssVectorV3":   "",
 						},
 					},
@@ -165,17 +253,18 @@ func importFindingsToSecurityHub(report Trivytypes.VulnerabilityReport) error {
 		})
 	}
 
-	// // Handle Misconfigurations (if present)
-	// for _, misconfig := range report.Report.Misconfigurations {
-	// TODO: Implement handling of Misconfigurations
-	// }
+	return findings, err
+}
 
-	// Handle Secrets (if present)
-	// for _, secret := range report.Report.Secrets {
-	// TODO: Implement handling of Secrets
-	// }
+// Import findings to AWS Security Hub in batches of 100
+func importFindingsToSecurityHub(findings []types.AwsSecurityFinding) error {
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		return fmt.Errorf("unable to load SDK config: %v", err)
+	}
 
-	// Import findings to AWS Security Hub in batches of 100
+	client := securityhub.NewFromConfig(cfg)
+
 	batchSize := 100
 	for i := 0; i < len(findings); i += batchSize {
 		end := i + batchSize
