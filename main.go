@@ -154,7 +154,7 @@ func getConfigAuditReportFindings(body []byte) ([]types.AwsSecurityFinding, erro
 			ProductArn:    aws.String(ProductArn),
 			GeneratorId:   aws.String(fmt.Sprintf("Trivy/%s", check.ID)),
 			AwsAccountId:  aws.String(AWSAccountID),
-			Types:         []string{"Software and Configuration Checks/Vulnerabilities/CVE"},
+			Types:         []string{"Software and Configuration Checks"},
 			CreatedAt:     aws.String(time.Now().Format(time.RFC3339)),
 			UpdatedAt:     aws.String(time.Now().Format(time.RFC3339)),
 			Severity:      &types.Severity{Label: types.SeverityLabel(severity)},
@@ -196,8 +196,13 @@ func getInfraAssessmentReport(body []byte) ([]types.AwsSecurityFinding, error) {
 	}
 
 	log.Printf("Processing report: %s", infraAssessmentReport.Name)
+
 	// by the moment, only print the report for debugging purposes
-	log.Printf("Report: %v", infraAssessmentReport)
+	reportJSON, err := json.MarshalIndent(infraAssessmentReport, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("error encoding JSON: %v", err)
+	}
+	log.Printf("Report: %s", reportJSON)
 
 	// Prepare findings for AWS Security Hub BatchImportFindings API
 	var findings []types.AwsSecurityFinding
@@ -215,8 +220,13 @@ func getClusterComplianceReport(body []byte) ([]types.AwsSecurityFinding, error)
 	}
 
 	log.Printf("Processing report: %s", clusterComplianceReport.Name)
+
 	// by the moment, only print the report for debugging purposes
-	log.Printf("Report: %v", clusterComplianceReport)
+	reportJSON, err := json.MarshalIndent(clusterComplianceReport, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("error encoding JSON: %v", err)
+	}
+	log.Printf("Report: %s", reportJSON)
 
 	// Prepare findings for AWS Security Hub BatchImportFindings API
 	var findings []types.AwsSecurityFinding
