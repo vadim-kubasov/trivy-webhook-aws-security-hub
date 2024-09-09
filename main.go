@@ -175,14 +175,25 @@ func importFindingsToSecurityHub(report Trivytypes.VulnerabilityReport) error {
 	// TODO: Implement handling of Secrets
 	// }
 
-	input := &securityhub.BatchImportFindingsInput{
-		Findings: findings,
-	}
+	// Import findings to AWS Security Hub in batches of 100
+	batchSize := 100
+	for i := 0; i < len(findings); i += batchSize {
+		end := i + batchSize
+		if end > len(findings) {
+			end = len(findings)
+		}
 
-	// Call BatchImportFindings API
-	_, err = client.BatchImportFindings(context.TODO(), input)
-	if err != nil {
-		return fmt.Errorf("error importing findings to Security Hub: %v", err)
+		batch := findings[i:end]
+
+		input := &securityhub.BatchImportFindingsInput{
+			Findings: batch,
+		}
+
+		// Call BatchImportFindings API
+		_, err := client.BatchImportFindings(context.TODO(), input)
+		if err != nil {
+			return fmt.Errorf("error importing findings to Security Hub: %v", err)
+		}
 	}
 
 	log.Printf("%d Findings imported to Security Hub", len(findings))
