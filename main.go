@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/securityhub"
 	"github.com/aws/aws-sdk-go-v2/service/securityhub/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/csepulveda/trivy-webhook-aws-security-hub/tools"
 	"github.com/gorilla/mux"
 )
 
@@ -317,7 +318,7 @@ func getVulnerabilityReportFindings(body []byte) ([]types.AwsSecurityFinding, er
 							"PkgName":           vulnerabilities.Resource,
 							"Installed Package": vulnerabilities.InstalledVersion,
 							"Patched Package":   vulnerabilities.FixedVersion,
-							"NvdCvssScoreV3":    fmt.Sprintf("%f", getVulnScore(vulnerabilities)),
+							"NvdCvssScoreV3":    fmt.Sprintf("%f", tools.GetVulnScore(vulnerabilities)),
 							"NvdCvssVectorV3":   "",
 						},
 					},
@@ -328,13 +329,6 @@ func getVulnerabilityReportFindings(body []byte) ([]types.AwsSecurityFinding, er
 	}
 
 	return findings, err
-}
-
-func getVulnScore(d v1alpha1.Vulnerability) float64 {
-	if d.Score != nil {
-		return *d.Score
-	}
-	return 0.0
 }
 
 // Import findings to AWS Security Hub in batches of 100
